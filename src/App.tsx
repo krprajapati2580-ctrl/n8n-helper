@@ -2638,7 +2638,7 @@ Message: The node "Fetch Customers" does not exist or has no execution output da
                         <button
                           type="button"
                           onClick={() => {
-                            if (window.confirm("Are you sure you want to restore the default training rules? This will replace your current memory list.")) {
+                            if (globalThis.confirm("Are you sure you want to restore the default training rules? This will replace your current memory list.")) {
                               setLocalTrainingData(DEFAULT_TRAINING_DATA);
                             }
                           }}
