@@ -1,0 +1,6 @@
+{
+  "name": "n8n Workflow Copilot",
+  "description": "An interactive screen, code, and log analysis companion that guides you step-by-step through setting up, running, and troubleshooting ready-made n8n workflows.",
+  "requestFramePermissions": ["display-capture"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
