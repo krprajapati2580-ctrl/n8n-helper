@@ -256,7 +256,7 @@ export default function App() {
   
   // Navigation / Tabs
   const [activeTab, setActiveTab] = useState<'capture' | 'json' | 'native' | 'academy' | 'memory' | 'settings'>(() => {
-    return (localStorage.getItem('n8n_active_tab') as any) || 'capture';
+    return (localStorage.getItem('n8n_active_tab') as 'capture' | 'json' | 'native' | 'academy' | 'memory' | 'settings') || 'capture';
   });
   const [selectedNode, setSelectedNode] = useState<NodeFound | null>(null);
 
@@ -317,7 +317,7 @@ export default function App() {
 
   // Fallback API Keys & Preferred Model states
   const [preferredModel, setPreferredModel] = useState<'gemini' | 'openai' | 'claude'>(() => {
-    return (localStorage.getItem('n8n_preferred_model') as any) || 'gemini';
+    return (localStorage.getItem('n8n_preferred_model') as 'gemini' | 'openai' | 'claude') || 'gemini';
   });
   const [openaiApiKey, setOpenaiApiKey] = useState<string>(() => {
     return localStorage.getItem('n8n_openai_api_key') || '';
@@ -373,7 +373,7 @@ export default function App() {
     try {
       setErrorMsg(null);
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always' } as any,
+        video: { cursor: 'always' } as unknown as MediaTrackConstraints,
         audio: false
       });
       
@@ -572,7 +572,7 @@ export default function App() {
       setErrorMsg(null);
       // Request screen video capture
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: 'always' } as any,
+        video: { cursor: 'always' } as unknown as MediaTrackConstraints,
         audio: false
       });
       
@@ -1280,7 +1280,7 @@ Time: 09:34:12 UTC`);
                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">Model Engine</label>
                         <select
                           value={preferredModel}
-                          onChange={(e) => setPreferredModel(e.target.value as any)}
+                          onChange={(e) => setPreferredModel(e.target.value as 'gemini' | 'openai' | 'claude')}
                           className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] outline-none font-semibold"
                         >
                           <option value="gemini">Gemini 3.5 Flash</option>
@@ -1982,7 +1982,7 @@ Message: The node "Fetch Customers" does not exist or has no execution output da
                         <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Category</label>
                         <select
                           value={newRuleCategory}
-                          onChange={(e) => setNewRuleCategory(e.target.value as any)}
+                          onChange={(e) => setNewRuleCategory(e.target.value as 'Credentials' | 'Environment' | 'Best Practices' | 'Custom Snippets')}
                           className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                         >
                           <option value="Environment">Environment Setup</option>
@@ -2130,7 +2130,7 @@ Message: The node "Fetch Customers" does not exist or has no execution output da
                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">Preferred AI Model Engine</label>
                         <select
                           value={preferredModel}
-                          onChange={(e) => setPreferredModel(e.target.value as any)}
+                          onChange={(e) => setPreferredModel(e.target.value as 'gemini' | 'openai' | 'claude')}
                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-slate-950"
                         >
                           <option value="gemini">Gemini 3.5 Flash (Default Co-Pilot)</option>
