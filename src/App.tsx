@@ -33,10 +33,13 @@ import {
   Activity,
   Minimize2,
   Maximize2,
-  Search
+  Search,
+  Compass,
+  GitCommit
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Message, ChecklistItem, NodeFound, WorkflowInsight, AnalysisResponse } from './types';
+import WebhookInspector from './components/WebhookInspector';
 
 // Predefined realistic n8n workflow for quick demo loading
 const SAMPLE_N8N_WORKFLOW = {
@@ -315,6 +318,50 @@ const DEFAULT_TRAINING_DATA: TrainingRule[] = [
   }
 ];
 
+const getConnectionSuggestion = (nodeName: string) => {
+  const lowerName = nodeName.toLowerCase();
+  if (lowerName.includes('webhook') || lowerName.includes('trigger') && !lowerName.includes('error')) {
+    return {
+      suggestedNodeName: "OpenAI Enrichment Agent",
+      suggestedNodeType: "n8n-nodes-base.openAi",
+      reason: "To parse, categorize, and enrich incoming raw webhook payload data using AI before notifying teams or routing to databases.",
+      outputPort: "Main Output Handle (Data)",
+      targetNodeName: "OpenAI enrichment"
+    };
+  } else if (lowerName.includes('openai') || lowerName.includes('gemini') || lowerName.includes('enrichment') || lowerName.includes('agent')) {
+    return {
+      suggestedNodeName: "Slack Operations Alert",
+      suggestedNodeType: "n8n-nodes-base.slack",
+      reason: "To immediately post high-priority structured lead notifications directly to your team's custom Slack channel.",
+      outputPort: "Main Output Handle (JSON Output)",
+      targetNodeName: "Slack Notify"
+    };
+  } else if (lowerName.includes('error')) {
+    return {
+      suggestedNodeName: "Slack Notify / AI Diagnostics",
+      suggestedNodeType: "n8n-nodes-base.slack",
+      reason: "To alert engineers on dedicated Slack operations channels with full stack traces, log outputs, and context for automated self-healing.",
+      outputPort: "Error Output Handle (Trigger Logs)",
+      targetNodeName: "Slack Notify"
+    };
+  } else if (lowerName.includes('slack') || lowerName.includes('notify')) {
+    return {
+      suggestedNodeName: "Postgres Database / Airtable logger",
+      suggestedNodeType: "n8n-nodes-base.postgres",
+      reason: "To log and audit operations, creating a persistent registry of all notifications sent.",
+      outputPort: "Main Output Handle (Response Status)",
+      targetNodeName: ""
+    };
+  }
+  return {
+    suggestedNodeName: "Code Node",
+    suggestedNodeType: "n8n-nodes-base.code",
+    reason: "Standard JavaScript execution block to format, filter, and transform schemas between nodes.",
+    outputPort: "Main Output Handle",
+    targetNodeName: ""
+  };
+};
+
 export default function App() {
   // Input fields
   const [workflowJson, setWorkflowJson] = useState<string>(() => localStorage.getItem('n8n_workflow_json') || '');
@@ -326,6 +373,7 @@ export default function App() {
     return (localStorage.getItem('n8n_active_tab') as 'capture' | 'json' | 'native' | 'academy' | 'memory' | 'settings') || 'capture';
   });
   const [selectedNode, setSelectedNode] = useState<NodeFound | null>(null);
+  const [isAssistantActive, setIsAssistantActive] = useState<boolean>(false);
 
   // Academy states
   const [currentQuizIndex, setCurrentQuizIndex] = useState<number>(0);
@@ -503,6 +551,28 @@ export default function App() {
         id: `live-off-${Date.now()}`,
         sender: 'assistant',
         text: "🛑 **Live guiding stream stopped.** I am no longer recording or syncing your screen.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+  };
+
+  const handleApplyPresetSolution = (title: string, content: string) => {
+    if (!localTrainingData.some(rule => rule.title === title)) {
+      const newRule: TrainingRule = {
+        id: `preset-patch-${Date.now()}`,
+        title,
+        category: 'Environment',
+        content
+      };
+      setLocalTrainingData(prev => [...prev, newRule]);
+    }
+    setActiveTab('memory');
+    setChatHistory(prev => [
+      ...prev,
+      {
+        id: `patch-added-${Date.now()}`,
+        sender: 'assistant',
+        text: `🛠️ **Copilot Context Updated!**\n\nI have automatically ingested the environment rule: **${title}** into my local workspace memory. This solution is now actively prioritized for future workspace diagnoses!`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
     ]);
@@ -979,19 +1049,56 @@ Time: 09:34:12 UTC`);
 
               {/* Node Graph simulator */}
               <div className="flex-1 relative flex items-center justify-center p-8">
-                {/* SVG connection lines */}
-                <svg className="absolute inset-0 h-full w-full pointer-events-none">
-                  {/* Webhook -> OpenAI */}
-                  <path d="M 280,260 Q 350,260 420,260" stroke="#475569" strokeWidth="2.5" fill="none" strokeDasharray="5,5" className="animate-pulse" />
-                  {/* OpenAI -> Slack */}
-                  <path d="M 540,260 Q 610,260 680,260" stroke="#334155" strokeWidth="2.5" fill="none" />
-                </svg>
-
                 {/* Simulated Nodes List */}
                 <div className="relative w-full max-w-2xl h-[320px] flex flex-col justify-between z-10">
-                  <div className="flex justify-between items-center">
+                  {/* SVG connection lines inside relative container for perfect stability */}
+                  <svg className="absolute inset-0 h-full w-full pointer-events-none z-0">
+                    {/* Webhook -> OpenAI */}
+                    <path 
+                      d="M 176,50 C 280,50 376,50 480,50" 
+                      stroke={isAssistantActive && (selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger") ? "#34d399" : "#475569"} 
+                      strokeWidth={isAssistantActive && (selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger") ? "3.5" : "2.5"} 
+                      fill="none" 
+                      strokeDasharray={isAssistantActive && (selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger") ? "6,4" : "5,5"} 
+                      className={isAssistantActive && (selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger") ? "animate-flow" : "animate-pulse"} 
+                    />
+                    {/* OpenAI -> Slack */}
+                    <path 
+                      d="M 672,50 C 740,50 420,270 496,270" 
+                      stroke={isAssistantActive && (selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment") ? "#6366f1" : "#334155"} 
+                      strokeWidth={isAssistantActive && (selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment") ? "3.5" : "2"} 
+                      fill="none" 
+                      strokeDasharray={isAssistantActive && (selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment") ? "6,4" : "none"}
+                      className={isAssistantActive && (selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment") ? "animate-flow" : ""}
+                    />
+                    {/* Error Trigger -> Slack or AI */}
+                    <path 
+                      d="M 176,270 C 280,270 392,270 496,270" 
+                      stroke={isAssistantActive && selectedNode?.name === "Error Trigger" ? "#34d399" : "#334155"} 
+                      strokeWidth={isAssistantActive && selectedNode?.name === "Error Trigger" ? "3.5" : "2"} 
+                      fill="none" 
+                      strokeDasharray={isAssistantActive && selectedNode?.name === "Error Trigger" ? "6,4" : "5,5"}
+                      className={isAssistantActive && selectedNode?.name === "Error Trigger" ? "animate-flow" : ""}
+                    />
+                  </svg>
+
+                  <div className="flex justify-between items-center z-10">
                     {/* Node 1: Webhook */}
-                    <div className="w-44 bg-[#1e293b] border border-slate-700 rounded-xl p-3.5 shadow-xl hover:border-slate-500 transition-all cursor-pointer">
+                    <div 
+                      onClick={() => {
+                        setSelectedNode({
+                          name: "Inbound Webhook",
+                          type: "n8n-nodes-base.webhook",
+                          description: "Listens for inbound HTTP requests/webhooks (from Stripe, HubSpot, GitHub, etc.) to trigger your workflow execution instantly.",
+                          credentialsNeeded: "None"
+                        });
+                      }}
+                      className={`w-44 bg-[#1e293b] border rounded-xl p-3.5 shadow-xl transition-all cursor-pointer relative group ${
+                        selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger"
+                          ? "border-emerald-500 ring-2 ring-emerald-500/50 shadow-emerald-500/10 scale-[1.02]" 
+                          : "border-slate-700 hover:border-slate-500 hover:scale-[1.01]"
+                      }`}
+                    >
                       <div className="flex items-center gap-2 text-left">
                         <div className="h-8 w-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
                           <Tv className="h-4 w-4" />
@@ -1005,6 +1112,22 @@ Time: 09:34:12 UTC`);
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
                         <span className="text-[9px] text-emerald-400 font-bold">Listening on :5678</span>
                       </div>
+
+                      {/* Webhook Output Port */}
+                      <div className={`absolute -right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-800 flex items-center justify-center transition-all z-20 group-hover:scale-110 ${
+                        isAssistantActive && (selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger")
+                          ? "ring-4 ring-emerald-500/80 bg-emerald-400 border-white scale-125 animate-pulse shadow-[0_0_12px_rgba(52,211,153,0.8)]"
+                          : "hover:bg-slate-400"
+                      }`}
+                      title="Main Output Handle"
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        {isAssistantActive && (selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger") && (
+                          <span className="absolute left-6 whitespace-nowrap bg-emerald-600 text-white font-mono font-bold text-[8px] px-1.5 py-0.5 rounded shadow-lg animate-bounce uppercase tracking-wider">
+                            👉 Connect from here
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Node 2: OpenAI Enrichment */}
@@ -1017,9 +1140,12 @@ Time: 09:34:12 UTC`);
                           credentialsNeeded: "OpenAI API Key (sk-proj-...)"
                         };
                         setSelectedNode(openAiNode);
-                        setActiveTab('settings');
                       }}
-                      className="w-48 bg-[#1e293b] border-2 border-rose-500/70 rounded-xl p-3.5 shadow-2xl hover:border-rose-400 transition-all cursor-pointer relative group"
+                      className={`w-48 bg-[#1e293b] border-2 rounded-xl p-3.5 shadow-2xl transition-all cursor-pointer relative group ${
+                        selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment"
+                          ? "border-indigo-500 ring-2 ring-indigo-500/50 shadow-indigo-500/10 scale-[1.02]" 
+                          : "border-rose-500/70 hover:border-rose-400 hover:scale-[1.01]"
+                      }`}
                     >
                       <div className="absolute -top-2.5 -right-2 bg-rose-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider animate-bounce">
                         ERROR 401
@@ -1036,12 +1162,58 @@ Time: 09:34:12 UTC`);
                       <p className="text-[9px] text-rose-300 mt-2 font-mono leading-normal bg-rose-950/40 p-1.5 rounded border border-rose-900/30 text-left">
                         Missing or invalid OpenAI API Key. Click to resolve!
                       </p>
+
+                      {/* OpenAI Input Port */}
+                      <div className={`absolute -left-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-800 flex items-center justify-center transition-all z-20 group-hover:scale-110 ${
+                        isAssistantActive && (selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger")
+                          ? "ring-4 ring-indigo-500/80 bg-indigo-400 border-white scale-125 animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.8)]"
+                          : "hover:bg-slate-400"
+                      }`}
+                      title="Input Handle"
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        {isAssistantActive && (selectedNode?.name === "Inbound Webhook" || selectedNode?.name === "Webhook Inbound Trigger") && (
+                          <span className="absolute right-6 whitespace-nowrap bg-indigo-600 text-white font-mono font-bold text-[8px] px-1.5 py-0.5 rounded shadow-lg animate-bounce uppercase tracking-wider">
+                            🎯 Target Input
+                          </span>
+                        )}
+                      </div>
+
+                      {/* OpenAI Output Port */}
+                      <div className={`absolute -right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-800 flex items-center justify-center transition-all z-20 group-hover:scale-110 ${
+                        isAssistantActive && (selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment")
+                          ? "ring-4 ring-emerald-500/80 bg-emerald-400 border-white scale-125 animate-pulse shadow-[0_0_12px_rgba(52,211,153,0.8)]"
+                          : "hover:bg-slate-400"
+                      }`}
+                      title="Main Output Handle"
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        {isAssistantActive && (selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment") && (
+                          <span className="absolute left-6 whitespace-nowrap bg-emerald-600 text-white font-mono font-bold text-[8px] px-1.5 py-0.5 rounded shadow-lg animate-bounce uppercase tracking-wider">
+                            👉 Connect from here
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center z-10">
                     {/* Node 3: Error Trigger */}
-                    <div className="w-44 bg-[#1e293b] border border-slate-700 rounded-xl p-3.5 shadow-xl hover:border-slate-500 transition-all cursor-pointer">
+                    <div 
+                      onClick={() => {
+                        setSelectedNode({
+                          name: "Error Trigger",
+                          type: "n8n-nodes-base.errorTrigger",
+                          description: "Fires automatically when any node in the active workflow fails, capturing the full error context, node name, and stack trace to allow automated recovery.",
+                          credentialsNeeded: "None"
+                        });
+                      }}
+                      className={`w-44 bg-[#1e293b] border rounded-xl p-3.5 shadow-xl transition-all cursor-pointer relative group ${
+                        selectedNode?.name === "Error Trigger"
+                          ? "border-emerald-500 ring-2 ring-emerald-500/50 shadow-emerald-500/10 scale-[1.02]" 
+                          : "border-slate-700 hover:border-slate-500 hover:scale-[1.01]"
+                      }`}
+                    >
                       <div className="flex items-center gap-2 text-left">
                         <div className="h-8 w-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
                           <Zap className="h-4 w-4" />
@@ -1054,12 +1226,42 @@ Time: 09:34:12 UTC`);
                       <div className="mt-2 text-left">
                         <span className="text-[9px] text-slate-400 block font-medium">Bypasses crash to run recovery flow</span>
                       </div>
+
+                      {/* Error Trigger Output Port */}
+                      <div className={`absolute -right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-800 flex items-center justify-center transition-all z-20 group-hover:scale-110 ${
+                        isAssistantActive && selectedNode?.name === "Error Trigger"
+                          ? "ring-4 ring-emerald-500/80 bg-emerald-400 border-white scale-125 animate-pulse shadow-[0_0_12px_rgba(52,211,153,0.8)]"
+                          : "hover:bg-slate-400"
+                      }`}
+                      title="Main Output Handle"
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        {isAssistantActive && selectedNode?.name === "Error Trigger" && (
+                          <span className="absolute left-6 whitespace-nowrap bg-emerald-600 text-white font-mono font-bold text-[8px] px-1.5 py-0.5 rounded shadow-lg animate-bounce uppercase tracking-wider">
+                            👉 Connect from here
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Node 4: Slack Notification */}
-                    <div className="w-44 bg-[#1e293b] border border-slate-700 rounded-xl p-3.5 shadow-xl opacity-60">
+                    <div 
+                      onClick={() => {
+                        setSelectedNode({
+                          name: "Slack Notify",
+                          type: "n8n-nodes-base.slack",
+                          description: "Sends customized alerts, rich markdown blocks, or status updates to a specific Slack channel or user.",
+                          credentialsNeeded: "Slack OAuth Credentials"
+                        });
+                      }}
+                      className={`w-44 bg-[#1e293b] border rounded-xl p-3.5 shadow-xl transition-all cursor-pointer relative group ${
+                        selectedNode?.name === "Slack Notify"
+                          ? "border-indigo-500 ring-2 ring-indigo-500/50 shadow-indigo-500/10 scale-[1.02] opacity-100" 
+                          : "border-slate-700 hover:border-slate-500 hover:scale-[1.01] opacity-75 hover:opacity-100"
+                      }`}
+                    >
                       <div className="flex items-center gap-2 text-left">
-                        <div className="h-8 w-8 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center border border-slate-700">
+                        <div className="h-8 w-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
                           <Layers className="h-4 w-4" />
                         </div>
                         <div className="text-left">
@@ -1068,7 +1270,39 @@ Time: 09:34:12 UTC`);
                         </div>
                       </div>
                       <div className="mt-2 text-left">
-                        <span className="text-[9px] text-slate-500 block font-medium">Waiting for upstream...</span>
+                        <span className="text-[9px] text-slate-400 block font-medium">Post rich alerts & status channels</span>
+                      </div>
+
+                      {/* Slack Input Port */}
+                      <div className={`absolute -left-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-800 flex items-center justify-center transition-all z-20 group-hover:scale-110 ${
+                        isAssistantActive && (selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment" || selectedNode?.name === "Error Trigger")
+                          ? "ring-4 ring-indigo-500/80 bg-indigo-400 border-white scale-125 animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.8)]"
+                          : "hover:bg-slate-400"
+                      }`}
+                      title="Input Handle"
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        {isAssistantActive && (selectedNode?.name === "OpenAI Enrichment Agent" || selectedNode?.name === "OpenAI enrichment" || selectedNode?.name === "Error Trigger") && (
+                          <span className="absolute right-6 whitespace-nowrap bg-indigo-600 text-white font-mono font-bold text-[8px] px-1.5 py-0.5 rounded shadow-lg animate-bounce uppercase tracking-wider">
+                            🎯 Target Input
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Slack Output Port */}
+                      <div className={`absolute -right-1.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-800 flex items-center justify-center transition-all z-20 group-hover:scale-110 ${
+                        isAssistantActive && selectedNode?.name === "Slack Notify"
+                          ? "ring-4 ring-emerald-500/80 bg-emerald-400 border-white scale-125 animate-pulse shadow-[0_0_12px_rgba(52,211,153,0.8)]"
+                          : "hover:bg-slate-400"
+                      }`}
+                      title="Main Output Handle"
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        {isAssistantActive && selectedNode?.name === "Slack Notify" && (
+                          <span className="absolute left-6 whitespace-nowrap bg-emerald-600 text-white font-mono font-bold text-[8px] px-1.5 py-0.5 rounded shadow-lg animate-bounce uppercase tracking-wider">
+                            👉 Connect from here
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1081,6 +1315,90 @@ Time: 09:34:12 UTC`);
                     Live screen guiding active. Toggle 'Standard Layout' at the top to configure custom JSON!
                   </span>
                 </div>
+
+                {/* Float-card overlay for selected node on canvas */}
+                <AnimatePresence>
+                  {selectedNode && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 15 }}
+                      className="absolute bottom-4 left-4 right-4 bg-[#111827]/95 text-slate-100 rounded-xl p-4 shadow-2xl border border-slate-800 backdrop-blur-md z-25 flex flex-col gap-3 text-left"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
+                            <Key className="h-4 w-4 text-emerald-400" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-bold text-white">{selectedNode.name}</h4>
+                              <span className="text-[9px] bg-slate-800 border border-slate-700 text-slate-300 font-mono px-1.5 py-0.5 rounded">
+                                {selectedNode.type}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-300 mt-1">
+                              {selectedNode.description}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => {
+                            setSelectedNode(null);
+                            setIsAssistantActive(false);
+                          }}
+                          className="text-slate-400 hover:text-white p-1 hover:bg-slate-850 rounded cursor-pointer shrink-0"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Launch assistant buttons & suggestions in canvas view */}
+                      <div className="border-t border-slate-800 pt-2 flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] text-slate-400 font-mono font-bold uppercase tracking-wider">
+                            Smart Connection Assistant
+                          </span>
+                          
+                          <button
+                            type="button"
+                            onClick={() => setIsAssistantActive(prev => !prev)}
+                            className={`text-[9px] font-extrabold px-3 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                              isAssistantActive
+                                ? 'bg-rose-500 hover:bg-rose-600 text-white border-rose-600 shadow-sm'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 shadow-sm animate-pulse shadow-indigo-500/20'
+                            }`}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            {isAssistantActive ? "Close Assistant" : "Suggest Next Connection"}
+                          </button>
+                        </div>
+
+                        {isAssistantActive && (
+                          <div className="p-2.5 bg-slate-950/80 rounded-lg border border-indigo-500/40 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                            <div className="flex items-start gap-2">
+                              <Compass className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-slate-200 leading-normal">
+                                <span className="font-bold text-slate-400">Next Node Suggestion:</span> <span className="text-emerald-400 font-bold font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/20">{getConnectionSuggestion(selectedNode.name).suggestedNodeName}</span>. {getConnectionSuggestion(selectedNode.name).reason}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between bg-slate-900/50 px-2 py-1.5 rounded border border-slate-800 text-[9px] font-mono">
+                              <span className="text-slate-400 flex items-center gap-1">
+                                <GitCommit className="h-3 w-3 text-indigo-400 animate-pulse" />
+                                Output Port:
+                              </span>
+                              <span className="text-emerald-400 font-bold">
+                                {getConnectionSuggestion(selectedNode.name).outputPort}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>
@@ -1642,6 +1960,14 @@ Time: 09:34:12 UTC`);
                         <span className="font-semibold text-slate-800">How visual analysis helps:</span> Share your n8n browser tab or desktop. Once captured, our companion parses the visual node lines, execution indicators, status lights, or error warning bubbles automatically!
                       </div>
                     </div>
+                  </div>
+
+                  {/* Webhook URL Inspector & Parameter Matcher */}
+                  <div className="mt-2">
+                    <WebhookInspector 
+                      isStreamActive={isLiveGuidingActive} 
+                      onApplyPresetSolution={handleApplyPresetSolution} 
+                    />
                   </div>
                 </div>
               )}
@@ -2659,37 +2985,85 @@ Ensure you set NODE_FUNCTION_ALLOW_EXTERNAL=lodash env variable in your n8n Dock
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="bg-slate-900 text-slate-100 rounded-2xl p-4.5 shadow-md border border-slate-800 relative"
+                className="bg-slate-900 text-slate-100 rounded-2xl p-4.5 shadow-md border border-slate-800 relative text-left"
               >
                 <button 
-                  onClick={() => setSelectedNode(null)}
-                  className="absolute top-3.5 right-3.5 text-slate-400 hover:text-white"
+                  onClick={() => {
+                    setSelectedNode(null);
+                    setIsAssistantActive(false);
+                  }}
+                  className="absolute top-3.5 right-3.5 text-slate-400 hover:text-white cursor-pointer"
                 >
                   <X className="h-4 w-4" />
                 </button>
-                <div className="flex items-start gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700 mt-0.5 shrink-0">
-                    <Key className="h-4.5 w-4.5 text-emerald-400" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-white">{selectedNode.name}</h4>
-                      <span className="text-[9px] bg-slate-800 border border-slate-700 text-slate-300 font-mono px-1.5 py-0.5 rounded">
-                        {selectedNode.type}
-                      </span>
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700 mt-0.5 shrink-0">
+                      <Key className="h-4.5 w-4.5 text-emerald-400" />
                     </div>
-                    <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
-                      {selectedNode.description}
-                    </p>
-                    {selectedNode.credentialsNeeded && selectedNode.credentialsNeeded !== 'None' && (
-                      <div className="mt-3 p-2 bg-slate-850 rounded-lg border border-slate-800 flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400 flex items-center gap-1 font-semibold">
-                          <Key className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                          Required Credentials ID:
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-white">{selectedNode.name}</h4>
+                        <span className="text-[9px] bg-slate-800 border border-slate-700 text-slate-300 font-mono px-1.5 py-0.5 rounded">
+                          {selectedNode.type}
                         </span>
-                        <code className="text-emerald-400 font-mono text-[10px] bg-slate-950 px-2 py-0.5 rounded">
-                          {selectedNode.credentialsNeeded}
-                        </code>
+                      </div>
+                      <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
+                        {selectedNode.description}
+                      </p>
+                      {selectedNode.credentialsNeeded && selectedNode.credentialsNeeded !== 'None' && (
+                        <div className="mt-3 p-2 bg-slate-850 rounded-lg border border-slate-800 flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400 flex items-center gap-1 font-semibold">
+                            <Key className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                            Required Credentials ID:
+                          </span>
+                          <code className="text-emerald-400 font-mono text-[10px] bg-slate-950 px-2 py-0.5 rounded">
+                            {selectedNode.credentialsNeeded}
+                          </code>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Standard view Connection Assistant controls */}
+                  <div className="border-t border-slate-800 pt-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] text-slate-400 font-mono font-bold uppercase tracking-wider">
+                        Smart Connection Assistant
+                      </span>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setIsAssistantActive(prev => !prev)}
+                        className={`text-[9px] font-extrabold px-3 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isAssistantActive
+                            ? 'bg-rose-500 hover:bg-rose-600 text-white border-rose-600 shadow-sm'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700 shadow-sm animate-pulse shadow-indigo-500/20'
+                        }`}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        {isAssistantActive ? "Close Assistant" : "Suggest Next Connection"}
+                      </button>
+                    </div>
+
+                    {isAssistantActive && (
+                      <div className="p-3 bg-slate-950/80 rounded-xl border border-indigo-500/40 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                        <div className="flex items-start gap-2">
+                          <Compass className="h-4.5 w-4.5 text-emerald-400 shrink-0 mt-0.5" />
+                          <p className="text-[11px] text-slate-200 leading-normal">
+                            <span className="font-bold text-slate-400">Next Node Suggestion:</span> <span className="text-emerald-400 font-bold font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/20">{getConnectionSuggestion(selectedNode.name).suggestedNodeName}</span>. {getConnectionSuggestion(selectedNode.name).reason}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between bg-slate-900/50 px-2.5 py-2 rounded border border-slate-800 text-[10px] font-mono">
+                          <span className="text-slate-400 flex items-center gap-1">
+                            <GitCommit className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
+                            Output Connection Port:
+                          </span>
+                          <span className="text-emerald-400 font-bold">
+                            {getConnectionSuggestion(selectedNode.name).outputPort}
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>

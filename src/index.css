@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+@keyframes flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.animate-flow {
+  animation: flow 1s linear infinite;
+}
