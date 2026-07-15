@@ -32,7 +32,8 @@ import {
   Sun,
   Activity,
   Minimize2,
-  Maximize2
+  Maximize2,
+  Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Message, ChecklistItem, NodeFound, WorkflowInsight, AnalysisResponse } from './types';
@@ -224,27 +225,93 @@ interface TrainingRule {
 const DEFAULT_TRAINING_DATA: TrainingRule[] = [
   {
     id: "rule-1",
-    title: "Local Docker Node Modules",
-    content: "Always launch local n8n Docker using env: NODE_FUNCTION_ALLOW_EXTERNAL=lodash,axios,cheerio so the custom Code Node can run external scripts without crashing.",
+    title: "Local Docker Node Modules Access",
+    content: "Error: 'Cannot find module ...' inside custom Code Nodes. Self-hosted n8n operates in a sandboxed Node.js environment. To permit external npm packages inside Code Nodes, you must run n8n with the environment variable: NODE_FUNCTION_ALLOW_EXTERNAL=lodash,axios,cheerio,uuid or set NODE_FUNCTION_ALLOW_BUILTIN=* in your docker-compose env setup.",
     category: "Environment"
   },
   {
     id: "rule-2",
     title: "Tunneling Webhooks locally (ngrok / Localtunnel)",
-    content: "When testing Webhook nodes on localhost, set WEBHOOK_URL=https://your-subdomain.ngrok-free.app so that Slack or GitHub triggers can reach your local machine's n8n port.",
+    content: "Issue: Trigger node hangs on 'Waiting for test event' or returns 404. When running n8n on localhost:5678, webhooks from Slack, Shopify, or GitHub cannot contact your local machine. Set WEBHOOK_URL=https://your-tunnel-subdomain.ngrok-free.app inside n8n's docker-compose, and ensure your third-party integrations point to this tunnel domain.",
     category: "Environment"
   },
   {
     id: "rule-3",
-    title: "Database PostgreSQL Local Certs",
-    content: "For local databases requiring SSL but running on self-signed certs, set DB_POSTGRES_SSL_REJECT_UNAUTHORIZED=false inside the system env.",
+    title: "Database PostgreSQL Local SSL Certs",
+    content: "Error: 'self-signed certificate' or connection rejected. For local or self-hosted databases that require SSL but use self-signed certificates, bypass strict validation rejection by configuring DB_POSTGRES_SSL_REJECT_UNAUTHORIZED=false in the n8n system container's environment configuration.",
     category: "Credentials"
   },
   {
     id: "rule-4",
     title: "AI Agent Node local rate limits",
-    content: "Keep rate limits on loops below 15 requests/min when testing with free tier Gemini or OpenAI keys to prevent sudden 429 quota exhaustion errors.",
+    content: "Error: '429 Too Many Requests' or 'Quota exceeded'. Keep loop-based request rates below 15 requests/minute when testing with free-tier or shared Gemini / OpenAI API keys. Implement standard rate limiting or use a Throttle node to serialize the flow.",
     category: "Best Practices"
+  },
+  {
+    id: "rule-5",
+    title: "Webhook URL Confusion (Test vs Production)",
+    content: "Issue: Webhook doesn't trigger when active, or test event fails to fire. n8n maintains separate Webhook paths: '/webhook-test/' (only listens for 120 seconds after you click 'Listen for test event' in the canvas UI) and '/webhook/' (active 24/7 once the workflow is toggled to ACTIVE and saved). Never mix up test payloads with the production path.",
+    category: "Best Practices"
+  },
+  {
+    id: "rule-6",
+    title: "n8n Expression Null Safety Operator",
+    content: "Error: 'Cannot read property of undefined'. Raw JSON payloads frequently have missing fields. Prevent execution halts by using safe optional chaining and default fallback syntax in expressions: {{ $json.body?.customer?.email || 'no-email@domain.com' }} or {{ $json.items?.[0]?.id ?? 'None' }}.",
+    category: "Custom Snippets"
+  },
+  {
+    id: "rule-7",
+    title: "HTTP Request SSL Verification Bypass",
+    content: "Error: 'self signed certificate in certificate chain'. When requesting self-hosted APIs or local development endpoints with the native HTTP Request Node, click 'Add Option' -> Select 'Ignore SSL Issues' and toggle it to TRUE to prevent Node.js from terminating the request due to trust issues.",
+    category: "Credentials"
+  },
+  {
+    id: "rule-8",
+    title: "Gmail API 403 Forbidden Access",
+    content: "Error: '403 Access Blocked' or 'Publishing status is testing'. In Google Cloud Console OAuth Consent settings, you must change your Publishing Status from 'Testing' to 'In Production', or explicitly add the user's Google accounts under the authorized 'Test Users' list to authorize access.",
+    category: "Credentials"
+  },
+  {
+    id: "rule-9",
+    title: "Google Sheets Shared Account Permissions",
+    content: "Error: 'Spreadsheet not found (404)' or permission denied. When using Google Sheets Service Account credentials, n8n connects via a client email (e.g. n8n-service@gcp-project.iam.gserviceaccount.com). You must manually share the Google Sheet with this exact service account email, granting it 'Editor' permissions.",
+    category: "Credentials"
+  },
+  {
+    id: "rule-10",
+    title: "Slack App Bot Scopes Alignment",
+    content: "Error: 'missing_scope' or 'not_in_channel'. Ensure your Slack App Bot token is granted 'chat:write' and 'channels:read' permissions in the Slack Developer Portal. Also, if posting to a private channel, your Slack App Bot must be manually invited to that channel first via: /invite @YourAppName.",
+    category: "Credentials"
+  },
+  {
+    id: "rule-11",
+    title: "JavaScript Out of Memory (Heap Exhausted)",
+    content: "Error: 'JavaScript heap out of memory' during large file processing or high-concurrency looping. Prevent host crashes by turning on executions database pruning: set EXECUTIONS_DATA_PRUNE=true, EXECUTIONS_DATA_MAX_AGE=168, and allocate more RAM using Docker's resource control: '--memory=2g'.",
+    category: "Environment"
+  },
+  {
+    id: "rule-12",
+    title: "SQLite Database Locks (Busy DB)",
+    content: "Error: 'SQLITE_BUSY: database is locked'. The default SQLite database is not designed for concurrent multi-worker production environments. If running multiple workflows concurrently, shift your self-hosted n8n backend storage by setting DB_TYPE=postgres and linking postgres credentials.",
+    category: "Environment"
+  },
+  {
+    id: "rule-13",
+    title: "HTTP Request Socket Connection Timeout",
+    content: "Error: 'ETIMEDOUT' or 'socket hang up' on heavy external requests. In the HTTP Request Node settings, click 'Add Option' -> Select 'Timeout' and increase the connection limit to 180000 milliseconds (3 minutes) to support slow API endpoints.",
+    category: "Best Practices"
+  },
+  {
+    id: "rule-14",
+    title: "Webhook CORS Preflight Responses",
+    content: "Error: 'CORS policy blocked preflight check' when triggering webhooks from a frontend application. Configure your Webhook Node settings: Set 'HTTP Method' to 'POST', then click 'Add Option' -> Select 'Response Headers' -> Add 'Access-Control-Allow-Origin: *' and 'Access-Control-Allow-Methods: POST, OPTIONS'.",
+    category: "Best Practices"
+  },
+  {
+    id: "rule-15",
+    title: "Expression Syntax for Space-Contained Node Names",
+    content: "Syntax Issue: When referencing an upstream node whose name contains spaces or special characters, standard dot-notation fails. Always use bracket-notation instead: {{ $('Google Sheets Reader').item.json.email }} instead of {{ $node.Google Sheets Reader.json.email }}.",
+    category: "Custom Snippets"
   }
 ];
 
@@ -325,6 +392,10 @@ export default function App() {
   const [claudeApiKey, setClaudeApiKey] = useState<string>(() => {
     return localStorage.getItem('n8n_claude_api_key') || '';
   });
+
+  // Preset Knowledge Search & Filters
+  const [presetSearchQuery, setPresetSearchQuery] = useState<string>('');
+  const [presetFilterCategory, setPresetFilterCategory] = useState<'All' | 'Credentials' | 'Environment' | 'Best Practices' | 'Custom Snippets'>('All');
 
   // Floating Companion & Dimmed Backdrop overlay modes
   const [isFloatingCompanion, setIsFloatingCompanion] = useState<boolean>(() => {
@@ -2035,6 +2106,157 @@ Message: The node "Fetch Customers" does not exist or has no execution output da
                         ✨ Brain Memory trained with new rule!
                       </div>
                     )}
+                  </div>
+
+                  {/* Preset Error Encyclopedia & Diagnostic Reference */}
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col gap-3 shadow-3xs text-left animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 flex-wrap gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <BookOpen className="h-4 w-4 text-indigo-600 animate-pulse" />
+                        <h5 className="text-xs font-bold text-slate-800">
+                          n8n Error Encyclopedia & Preset Library
+                        </h5>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const toAdd = DEFAULT_TRAINING_DATA.filter(
+                            defaultRule => !localTrainingData.some(r => r.title === defaultRule.title)
+                          );
+                          if (toAdd.length > 0) {
+                            setLocalTrainingData(prev => {
+                              // Filter out duplicates just in case
+                              const combined = [...prev];
+                              toAdd.forEach(item => {
+                                if (!combined.some(c => c.title === item.title)) {
+                                  combined.push({
+                                    id: `preset-${item.id}-${Date.now()}`,
+                                    title: item.title,
+                                    category: item.category,
+                                    content: item.content
+                                  });
+                                }
+                              });
+                              return combined;
+                            });
+                          }
+                        }}
+                        className="text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        ⚡ Train Copilot on All 15 Presets
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 leading-normal">
+                      Explore 15 pre-compiled common n8n errors. Click <strong>Train Copilot</strong> to feed specific solutions into the AI context for immediate, accurate, guided self-healing!
+                    </p>
+
+                    {/* Search & Filter controls */}
+                    <div className="flex flex-col sm:flex-row gap-2 mt-1">
+                      <div className="flex-1 relative">
+                        <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                          <Search className="h-3 w-3" />
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="Search error types, codes, nodes or variables..."
+                          value={presetSearchQuery}
+                          onChange={(e) => setPresetSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-slate-400 placeholder:text-slate-400 font-medium"
+                        />
+                      </div>
+
+                      {/* Category selector */}
+                      <select
+                        value={presetFilterCategory}
+                        onChange={(e) => setPresetFilterCategory(e.target.value as any)}
+                        className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-bold min-w-[120px] text-slate-700"
+                      >
+                        <option value="All">All Categories</option>
+                        <option value="Environment">Environment Setup</option>
+                        <option value="Credentials">Credentials & Secrets</option>
+                        <option value="Best Practices">Best Practices</option>
+                        <option value="Custom Snippets">Custom Snippets</option>
+                      </select>
+                    </div>
+
+                    {/* Filtered preset cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-2 max-h-[300px] overflow-y-auto pr-1">
+                      {DEFAULT_TRAINING_DATA.filter((rule) => {
+                        const matchText = (rule.title + ' ' + rule.content + ' ' + rule.category).toLowerCase();
+                        const matchSearch = matchText.includes(presetSearchQuery.toLowerCase());
+                        const matchCat = presetFilterCategory === 'All' || rule.category === presetFilterCategory;
+                        return matchSearch && matchCat;
+                      }).map((rule) => {
+                        const isTrained = localTrainingData.some(r => r.title === rule.title);
+                        let categoryColor = "bg-slate-100 text-slate-700 border-slate-200";
+                        if (rule.category === 'Credentials') categoryColor = "bg-amber-50 text-amber-700 border-amber-200";
+                        if (rule.category === 'Environment') categoryColor = "bg-blue-50 text-blue-700 border-blue-200";
+                        if (rule.category === 'Best Practices') categoryColor = "bg-indigo-50 text-indigo-700 border-indigo-200";
+                        if (rule.category === 'Custom Snippets') categoryColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+
+                        return (
+                          <div
+                            key={rule.id}
+                            className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 text-left ${
+                              isTrained
+                                ? 'bg-indigo-50/10 border-indigo-200 shadow-3xs'
+                                : 'bg-slate-50/50 border-slate-200 hover:border-slate-350'
+                            }`}
+                          >
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded border uppercase tracking-wider ${categoryColor}`}>
+                                  {rule.category}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-mono font-medium">Preset #{rule.id.split('-')[1]}</span>
+                              </div>
+                              <h6 className="text-xs font-bold text-slate-800 line-clamp-1">{rule.title}</h6>
+                              <p className="text-[10px] text-slate-600 font-mono leading-relaxed bg-white/70 p-2 rounded border border-slate-100 line-clamp-4 select-all">
+                                {rule.content}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between border-t border-slate-100/50 pt-2 mt-0.5">
+                              {isTrained ? (
+                                <span className="inline-flex items-center text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-150">
+                                  <Check className="h-3 w-3 mr-0.5 shrink-0" />
+                                  Trained & Active
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newRule: TrainingRule = {
+                                      id: `preset-rule-${Date.now()}`,
+                                      title: rule.title,
+                                      category: rule.category,
+                                      content: rule.content
+                                    };
+                                    setLocalTrainingData(prev => [...prev, newRule]);
+                                  }}
+                                  className="text-[9px] bg-slate-900 hover:bg-slate-800 text-white font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                                >
+                                  <Brain className="h-3 w-3 text-emerald-400" />
+                                  Train Copilot
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {DEFAULT_TRAINING_DATA.filter((rule) => {
+                        const matchText = (rule.title + ' ' + rule.content + ' ' + rule.category).toLowerCase();
+                        const matchSearch = matchText.includes(presetSearchQuery.toLowerCase());
+                        const matchCat = presetFilterCategory === 'All' || rule.category === presetFilterCategory;
+                        return matchSearch && matchCat;
+                      }).length === 0 && (
+                        <div className="col-span-1 md:col-span-2 text-center py-8 text-slate-400 text-[11px] font-medium border border-dashed rounded-xl bg-slate-50/50">
+                          No matching preset errors found in library. Try typing a different keyword!
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Active Rules List */}
